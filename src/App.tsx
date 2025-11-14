@@ -13,7 +13,7 @@ import { Label } from './components/ui/label';
 import { AuthModals } from './components/AuthModals';
 import logo from 'figma:asset/2d046533a292fce0e8c6f0953a21393852b873e7.png';
 import { FirebaseError } from 'firebase/app';
-import { signInWithPopup, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
+import { signInWithPopup, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import type { User as FirebaseAuthUser } from 'firebase/auth';
 import { auth, googleProvider } from './firebase/config';
 import { fetchHistoryEntries, saveHistoryEntry, deleteHistoryEntryFromFirestore, HistoryEntryDocument } from './services/history';
@@ -142,6 +142,8 @@ const features = [
   { icon: Shield, title: 'Natural Flow', description: 'Authentic, engaging content' },
   { icon: RefreshCw, title: 'Multiple Styles', description: 'Adapt to any tone you need' },
 ];
+
+const GOOGLE_AUTH_MODE_KEY = 'humality_google_mode';
 
 const mapHistoryDocumentToEntry = (doc: HistoryEntryDocument): HistoryEntry => {
   const inputAnalysis = analyzeAIContent(doc.inputText, false);
@@ -309,6 +311,34 @@ export default function App() {
     });
 
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          const mapped = mapFirebaseUser(result.user);
+          if (mapped) {
+            setUser(mapped);
+          }
+          const mode = window.localStorage.getItem(GOOGLE_AUTH_MODE_KEY) as 'login' | 'signup' | null;
+          if (mode) {
+            toast.success(mode === 'login' ? 'Logged in with Google!' : 'Signed up with Google!');
+            window.localStorage.removeItem(GOOGLE_AUTH_MODE_KEY);
+          } else {
+            toast.success('Signed in with Google!');
+          }
+          setShowLoginModal(false);
+          setShowSignupModal(false);
+        }
+      } catch (error) {
+        console.error('Google redirect failed', error);
+        toast.error(getAuthErrorMessage(error));
+      }
+    };
+
+    handleRedirectResult();
   }, []);
 
   useEffect(() => {
@@ -589,11 +619,23 @@ export default function App() {
     setIsGoogleLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
+      window.localStorage.removeItem(GOOGLE_AUTH_MODE_KEY);
       setShowLoginModal(false);
       setShowSignupModal(false);
       toast.success(mode === 'login' ? 'Logged in with Google!' : 'Signed up with Google!');
     } catch (error) {
-      toast.error(getAuthErrorMessage(error));
+      if (error instanceof FirebaseError && error.code === 'auth/popup-blocked') {
+        try {
+          window.localStorage.setItem(GOOGLE_AUTH_MODE_KEY, mode);
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirectError) {
+          console.error('Google redirect failed', redirectError);
+          toast.error(getAuthErrorMessage(redirectError));
+        }
+      } else {
+        toast.error(getAuthErrorMessage(error));
+      }
     } finally {
       setIsGoogleLoading(false);
     }

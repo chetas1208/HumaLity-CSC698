@@ -150,7 +150,7 @@ export function AuthModals({
                     <Button
                       type="submit"
                       disabled={isLoginLoading}
-                      className="w-full h-14 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white rounded-full text-base font-semibold shadow-lg shadow-brand-500/40 disabled:opacity-70"
+                      className="w-full h-14 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white rounded-full text-base font-semibold shadow-lg shadow-brand-500/40"
                     >
                       {isLoginLoading ? 'Logging in…' : 'Login'}
                     </Button>
@@ -280,7 +280,7 @@ export function AuthModals({
                     <Button
                       type="submit"
                       disabled={isSignupLoading}
-                      className="w-full h-14 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white rounded-full text-base font-semibold shadow-lg shadow-brand-500/40 disabled:opacity-70"
+                      className="w-full h-14 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-600 hover:to-brand-700 text-white rounded-full text-base font-semibold shadow-lg shadow-brand-500/40"
                     >
                       {isSignupLoading ? 'Creating account…' : 'Create Account'}
                     </Button>
