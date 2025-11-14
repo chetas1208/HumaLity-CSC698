@@ -808,7 +808,7 @@ export default function App() {
                 transition={{ delay: 0.2 }}
               >
                 <label className="text-gray-800 mb-4 block text-center">Select Your Tone</label>
-                <div className="flex gap-3 sm:gap-4 max-w-5xl mx-auto overflow-x-auto pb-2 flex-nowrap">
+                <div className="flex flex-wrap justify-center gap-3 sm:gap-4 max-w-5xl mx-auto">
                   {toneOptions.map((option) => (
                     <motion.button
                       key={option.value}
