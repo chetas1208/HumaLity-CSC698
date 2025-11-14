@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Vite build output
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+.python-version
+
+# Firebase/fastAPI local cache
+.firebase/
+.firebaserc.local
