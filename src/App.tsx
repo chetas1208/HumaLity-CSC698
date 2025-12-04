@@ -967,15 +967,8 @@ export default function App() {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <label className="text-gray-800">Humanized Text</label>
-                      {outputAIAnalysis.overallPercentage > 0 && (
-                        <Badge 
-                          className={`${
-                            outputAIAnalysis.overallPercentage >= 70 ? 'bg-red-500' :
-                            outputAIAnalysis.overallPercentage >= 40 ? 'bg-orange-500' :
-                            outputAIAnalysis.overallPercentage >= 20 ? 'bg-yellow-500' :
-                            'bg-green-500'
-                          } text-white border-0`}
-                        >
+                      {outputText && (
+                        <Badge className="bg-green-500 text-white border-0">
                           {outputAIAnalysis.overallPercentage}% AI
                         </Badge>
                       )}
