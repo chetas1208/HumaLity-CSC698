@@ -1,1 +1,4 @@
-# CSC698-GenAI_Project
+
+# Humanior Web Interface Design
+
+  
