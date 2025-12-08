@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -47,6 +49,13 @@
   --brand-500: #8B7AE8;
   --brand-600: #7062D4;
   --brand-700: #5A4DB8;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-strong: rgba(255, 255, 255, 0.92);
+  --surface-border: rgba(108, 99, 255, 0.18);
+  --page-gradient: radial-gradient(circle at 15% 20%, rgba(233, 236, 255, 0.9), transparent 55%),
+    radial-gradient(circle at 80% 0%, rgba(255, 214, 224, 0.6), transparent 45%),
+    linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 45%, #fdf5ff 100%);
+  --glow-color: rgba(139, 122, 232, 0.35);
 }
 
 .dark {
@@ -84,6 +93,13 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
+  --surface: rgba(15, 16, 35, 0.78);
+  --surface-strong: rgba(27, 30, 62, 0.92);
+  --surface-border: rgba(123, 113, 255, 0.35);
+  --page-gradient: radial-gradient(circle at 10% 10%, rgba(78, 64, 196, 0.35), transparent 50%),
+    radial-gradient(circle at 80% 0%, rgba(24, 144, 255, 0.3), transparent 45%),
+    linear-gradient(130deg, #050509 0%, #0f1729 60%, #0b1120 100%);
+  --glow-color: rgba(112, 98, 212, 0.55);
 }
 
 @theme inline {
@@ -142,6 +158,51 @@
 
   body {
     @apply bg-background text-foreground;
+    min-height: 100vh;
+    background-image: var(--page-gradient);
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-size: cover;
+    position: relative;
+    overflow-x: hidden;
+    transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+                color 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  body::before,
+  body::after {
+    content: "";
+    position: fixed;
+    inset: auto;
+    width: 420px;
+    height: 420px;
+    border-radius: 999px;
+    background: radial-gradient(circle, var(--glow-color), transparent 65%);
+    filter: blur(40px);
+    opacity: 0.45;
+    pointer-events: none;
+    animation: auroraShift 28s ease-in-out infinite;
+    mix-blend-mode: screen;
+    z-index: 0;
+  }
+
+  body::before {
+    bottom: 5%;
+    left: 5%;
+  }
+
+  body::after {
+    top: 10%;
+    right: 10%;
+    animation-delay: 12s;
+  }
+
+  * {
+    transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
@@ -202,4 +263,39 @@
 
 html {
   font-size: var(--font-size);
+}
+
+@keyframes auroraShift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(25px, -40px, 0) scale(1.1);
+  }
+  66% {
+    transform: translate3d(-30px, 40px, 0) scale(0.95);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@layer components {
+  .glass-panel {
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    box-shadow: 0 25px 45px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(18px);
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+
+  .glass-panel:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 30px 65px rgba(15, 23, 42, 0.12);
+    border-color: color-mix(in oklab, var(--brand-500) 35%, transparent);
+  }
+
+  .dark .glass-panel {
+    box-shadow: 0 25px 65px rgba(0, 0, 0, 0.55);
+  }
 }
