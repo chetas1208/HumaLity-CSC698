@@ -122,5 +122,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Created by Chetas Parekh** for CSC698 GenAI Project.
+**Created by Chetas Parekh, Arric Sekkhon & Swastik Amatya** for CSC698 GenAI Project.
   
