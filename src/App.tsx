@@ -11,6 +11,7 @@ import { Toaster } from './components/ui/sonner';
 import { Input } from './components/ui/input';
 import { Label } from './components/ui/label';
 import { AuthModals } from './components/AuthModals';
+import { ThemeToggle, ThemeFab } from './components/ThemeToggle';
 import logo from 'figma:asset/2d046533a292fce0e8c6f0953a21393852b873e7.png';
 import { FirebaseError } from 'firebase/app';
 import { signInWithPopup, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updateProfile, signInWithRedirect, getRedirectResult } from 'firebase/auth';
@@ -24,6 +25,12 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 interface TextSegment {
   text: string;
   aiProbability: number; // 0-1
+}
+
+interface DetectionResult {
+  score: number; // 0-100
+  analysis: string;
+  segments?: TextSegment[];
 }
 
 // History Entry type
@@ -44,75 +51,12 @@ interface User {
   email: string;
 }
 
-// Mock AI Detection Algorithm
-const analyzeAIContent = (text: string, isHumanized: boolean = false): { segments: TextSegment[], overallPercentage: number } => {
-  if (!text.trim()) {
-    return { segments: [], overallPercentage: 0 };
-  }
-
-  // Split text into sentences
-  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-  
-  const segments: TextSegment[] = sentences.map((sentence, index) => {
-    // Mock AI detection based on various "signals"
-    let aiScore = 0;
-    
-    // Check for common AI patterns
-    const aiIndicators = [
-      /furthermore|moreover|additionally|consequently/i,
-      /it is important to note|it should be noted/i,
-      /in conclusion|to summarize/i,
-      /various|numerous|multitude/i,
-      /optimize|leverage|utilize|facilitate/i,
-    ];
-    
-    const humanIndicators = [
-      /I think|I feel|I believe/i,
-      /honestly|basically|literally/i,
-      /stuff|things|kinda|sorta/i,
-    ];
-    
-    // Score based on indicators
-    aiIndicators.forEach(pattern => {
-      if (pattern.test(sentence)) aiScore += 0.2;
-    });
-    
-    humanIndicators.forEach(pattern => {
-      if (pattern.test(sentence)) aiScore -= 0.15;
-    });
-    
-    // Sentence length (AI tends to use medium-length sentences)
-    const wordCount = sentence.trim().split(/\s+/).length;
-    if (wordCount > 15 && wordCount < 30) aiScore += 0.15;
-    
-    // Add some randomness but bias based on isHumanized
-    const randomFactor = Math.random() * 0.3;
-    aiScore += isHumanized ? randomFactor - 0.4 : randomFactor + 0.3;
-    
-    // Normalize to 0-1 range
-    aiScore = Math.max(0, Math.min(1, aiScore));
-    
-    return {
-      text: sentence,
-      aiProbability: isHumanized ? aiScore * 0.3 : aiScore * 0.95, // Humanized text has much lower AI scores
-    };
-  });
-  
-  // Calculate overall percentage
-  const overallPercentage = segments.reduce((sum, seg) => sum + seg.aiProbability, 0) / segments.length;
-  
-  return {
-    segments,
-    overallPercentage: Math.round(overallPercentage * 100),
-  };
-};
-
 // Get color for AI probability
 const getAIHighlightColor = (probability: number): string => {
-  if (probability >= 0.7) return 'bg-red-200/60'; // High AI
-  if (probability >= 0.4) return 'bg-orange-200/60'; // Medium AI
-  if (probability >= 0.2) return 'bg-yellow-200/60'; // Low-Medium AI
-  return 'bg-green-200/40'; // Likely Human
+  if (probability >= 0.7) return 'bg-red-200/60 dark:bg-red-900/40'; // High AI
+  if (probability >= 0.4) return 'bg-orange-200/60 dark:bg-orange-900/40'; // Medium AI
+  if (probability >= 0.2) return 'bg-yellow-200/60 dark:bg-yellow-900/40'; // Low-Medium AI
+  return 'bg-green-200/40 dark:bg-green-900/40'; // Likely Human
 };
 
 interface ToneOption {
@@ -135,6 +79,7 @@ const defaultToneOptions: ToneOption[] = [
   { value: 'casual', label: 'Casual', icon: MessageSquare, description: 'Friendly & relaxed' },
   { value: 'professional', label: 'Professional', icon: Shield, description: 'Polished & formal' },
   { value: 'creative', label: 'Creative', icon: Zap, description: 'Expressive & unique' },
+  { value: 'concise', label: 'Concise', icon: AlertCircle, description: 'Clear & to the point' },
 ];
 
 const features = [
@@ -146,15 +91,13 @@ const features = [
 const GOOGLE_AUTH_MODE_KEY = 'humality_google_mode';
 
 const mapHistoryDocumentToEntry = (doc: HistoryEntryDocument): HistoryEntry => {
-  const inputAnalysis = analyzeAIContent(doc.inputText, false);
-  const outputAnalysis = analyzeAIContent(doc.outputText, true);
   return {
     id: doc.id,
     inputText: doc.inputText,
     outputText: doc.outputText,
     tone: doc.tone,
-    inputAIPercentage: inputAnalysis.overallPercentage,
-    outputAIPercentage: outputAnalysis.overallPercentage,
+    inputAIPercentage: doc.inputAIPercentage || 0,
+    outputAIPercentage: doc.outputAIPercentage || 0,
     timestamp: doc.createdAt ? doc.createdAt.toMillis() : Date.now(),
   };
 };
@@ -205,8 +148,11 @@ export default function App() {
   const [isConverting, setIsConverting] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
   const [copied, setCopied] = useState(false);
-  const [inputAIAnalysis, setInputAIAnalysis] = useState<{ segments: TextSegment[], overallPercentage: number }>({ segments: [], overallPercentage: 0 });
-  const [outputAIAnalysis, setOutputAIAnalysis] = useState<{ segments: TextSegment[], overallPercentage: number }>({ segments: [], overallPercentage: 0 });
+  const [inputAIAnalysis, setInputAIAnalysis] = useState<DetectionResult | null>(null);
+  const [outputAIAnalysis, setOutputAIAnalysis] = useState<DetectionResult | null>(null);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectionTimeout, setDetectionTimeout] = useState<number | null>(null);
+
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -226,161 +172,41 @@ export default function App() {
   const [isSignupLoading, setIsSignupLoading] = useState(false);
   const outputAnimationTimeoutRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchTones = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/tones`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch tone presets');
-        }
-        const data = await response.json();
-        if (Array.isArray(data) && data.length) {
-          const mappedTones: ToneOption[] = data.map((preset: { key: string; label: string; description: string }) => ({
-            value: preset.key,
-            label: preset.label,
-            description: preset.description,
-            icon: toneIconMap[preset.key] || Sparkles,
-          }));
-          if (isMounted) {
-            setToneOptions(mappedTones);
-            setTone((prev) => (mappedTones.some(option => option.value === prev) ? prev : mappedTones[0]?.value || prev));
-          }
-        }
-      } catch (error) {
-        console.error('Unable to load tone presets', error);
-      }
-    };
-
-    fetchTones();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (outputAnimationTimeoutRef.current) {
-      window.clearTimeout(outputAnimationTimeoutRef.current);
-      outputAnimationTimeoutRef.current = null;
-    }
-
-    if (!outputText) {
-      setDisplayedOutput('');
-      setIsAnimatingOutput(false);
-      setShouldAnimateOutput(false);
-      return;
-    }
-
-    if (!shouldAnimateOutput) {
-      setDisplayedOutput(outputText);
-      setIsAnimatingOutput(false);
-      return;
-    }
-
-    setDisplayedOutput('');
-    setIsAnimatingOutput(true);
-    let index = 0;
-
-    const animate = () => {
-      index += 1;
-      setDisplayedOutput(outputText.slice(0, index));
-      if (index < outputText.length) {
-        outputAnimationTimeoutRef.current = window.setTimeout(animate, 12);
-      } else {
-        setIsAnimatingOutput(false);
-        setShouldAnimateOutput(false);
-      }
-    };
-
-    outputAnimationTimeoutRef.current = window.setTimeout(animate, 20);
-
-    return () => {
-      if (outputAnimationTimeoutRef.current) {
-        window.clearTimeout(outputAnimationTimeoutRef.current);
-        outputAnimationTimeoutRef.current = null;
-      }
-    };
-  }, [outputText, shouldAnimateOutput]);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      const mapped = mapFirebaseUser(firebaseUser);
-      setUser(mapped);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const handleRedirectResult = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result?.user) {
-          const mapped = mapFirebaseUser(result.user);
-          if (mapped) {
-            setUser(mapped);
-          }
-          const mode = window.localStorage.getItem(GOOGLE_AUTH_MODE_KEY) as 'login' | 'signup' | null;
-          if (mode) {
-            toast.success(mode === 'login' ? 'Logged in with Google!' : 'Signed up with Google!');
-            window.localStorage.removeItem(GOOGLE_AUTH_MODE_KEY);
-          } else {
-            toast.success('Signed in with Google!');
-          }
-          setShowLoginModal(false);
-          setShowSignupModal(false);
-        }
-      } catch (error) {
-        console.error('Google redirect failed', error);
-        toast.error(getAuthErrorMessage(error));
-      }
-    };
-
-    handleRedirectResult();
-  }, []);
-
-  useEffect(() => {
-    if (!user?.uid) {
-      setHistory([]);
-      setShowHistory(false);
-       setIsHistoryLoading(false);
-      return;
-    }
-
-    let isActive = true;
-    setIsHistoryLoading(true);
-
-    const loadHistory = async () => {
-      try {
-        const entries = await fetchHistoryEntries(user.uid);
-        if (!isActive) return;
-        const mapped = entries.map(mapHistoryDocumentToEntry);
-        setHistory(mapped);
-      } catch (error) {
-        console.error('Failed to load history', error);
-        toast.error('Unable to load your history right now.');
-      } finally {
-        if (isActive) {
-          setIsHistoryLoading(false);
-        }
-      }
-    };
-
-    loadHistory();
-
-    return () => {
-      isActive = false;
-    };
-  }, [user?.uid]);
-
-  // Analyze input text when it changes
+  // Debounced AI Detection for Input
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value;
     setInputText(text);
-    const analysis = analyzeAIContent(text, false);
-    setInputAIAnalysis(analysis);
+    
+    if (detectionTimeout) {
+      window.clearTimeout(detectionTimeout);
+    }
+
+    if (text.trim().length < 10) {
+      setInputAIAnalysis(null);
+      setIsDetecting(false);
+      return;
+    }
+
+    setIsDetecting(true);
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/detect-ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setInputAIAnalysis(data);
+        }
+      } catch (error) {
+        console.error('Real-time detection error:', error);
+      } finally {
+        setIsDetecting(false);
+      }
+    }, 1000); // 1 second debounce
+    
+    setDetectionTimeout(timeout);
   };
 
   const handleConvert = async () => {
@@ -399,10 +225,10 @@ export default function App() {
     setDisplayedOutput('');
     setShouldAnimateOutput(false);
     setIsAnimatingOutput(false);
-    setOutputAIAnalysis({ segments: [], overallPercentage: 0 });
+    setOutputAIAnalysis(null);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/humanize`, {
+      const response = await fetch(`${API_BASE_URL}/humanize-with-detection`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -410,25 +236,19 @@ export default function App() {
         body: JSON.stringify({ text: inputText, tone }),
       });
 
-      const data = await response.json().catch(() => ({}));
-
       if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
         throw new Error(data?.detail || 'Failed to humanize text. Please try again.');
       }
 
-      const humanizedResponse = data?.humanized_text;
-      const humanized = typeof humanizedResponse === 'string' ? humanizedResponse.trim() : '';
-
-      if (!humanized) {
-        throw new Error('Received empty response from the humanization service.');
-      }
+      const data = await response.json();
+      const humanized = data.humanized_text;
       
       setShouldAnimateOutput(true);
       setOutputText(humanized);
-      
-      // Analyze humanized output
-      const analysis = analyzeAIContent(humanized, true);
-      setOutputAIAnalysis(analysis);
+      setInputText(inputText); // Ensure input text stays
+      setInputAIAnalysis(data.input_detection);
+      setOutputAIAnalysis(data.output_detection);
       
       // Add to history (persist if signed in)
       let historyEntryId: string | null = null;
@@ -439,6 +259,8 @@ export default function App() {
             inputText,
             outputText: humanized,
             tone,
+            inputAIPercentage: data.input_detection.score,
+            outputAIPercentage: data.output_detection.score,
           });
         } catch (error) {
           console.error('Failed to save history entry', error);
@@ -452,40 +274,20 @@ export default function App() {
           inputText,
           outputText: humanized,
           tone,
-          inputAIPercentage: inputAIAnalysis.overallPercentage,
-          outputAIPercentage: analysis.overallPercentage,
+          inputAIPercentage: data.input_detection.score,
+          outputAIPercentage: data.output_detection.score,
           timestamp: Date.now(),
         };
         setHistory((prev) => [newEntry, ...prev]);
       }
       
-      toast.success('Text humanized successfully!');
-      if (!user) {
-        toast.info('Sign in to save your conversions to history.');
-      }
+      toast.success('Text humanized and analyzed successfully!');
     } catch (error) {
       console.error('Humanization failed', error);
       toast.error(error instanceof Error ? error.message : 'Something went wrong while humanizing your text.');
     } finally {
       setIsConverting(false);
-    }
-  };
-
-  const handleRating = (value: number) => {
-    setRating(value);
-    toast.success(`Thanks for rating ${value} star${value > 1 ? 's' : ''}!`);
-  };
-
-  const handleCopy = async () => {
-    if (!outputText) return;
-    
-    try {
-      await navigator.clipboard.writeText(outputText);
-      setCopied(true);
-      toast.success('Copied to clipboard!');
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      toast.error('Failed to copy text');
+      setIsDetecting(false);
     }
   };
 
@@ -496,8 +298,9 @@ export default function App() {
     setShouldAnimateOutput(false);
     setIsAnimatingOutput(false);
     setTone(entry.tone);
-    setInputAIAnalysis(analyzeAIContent(entry.inputText, false));
-    setOutputAIAnalysis(analyzeAIContent(entry.outputText, true));
+    // We don't have full analysis for history items, so we mock the structure with just the score
+    setInputAIAnalysis({ score: entry.inputAIPercentage, analysis: 'Restored from history' });
+    setOutputAIAnalysis({ score: entry.outputAIPercentage, analysis: 'Restored from history' });
     setShowHistory(false);
     toast.success('History restored!');
   };
@@ -661,15 +464,80 @@ export default function App() {
     setShowHistory((prev) => !prev);
   };
 
+  const handleCopy = async () => {
+    if (!outputText.trim()) {
+      toast.error('Nothing to copy!');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(outputText);
+      setCopied(true);
+      toast.success('Copied to clipboard!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      toast.error('Failed to copy to clipboard');
+    }
+  };
+
+  const handleRating = (value: number) => {
+    setRating(value);
+    toast.success(`Thanks for rating ${value} star${value !== 1 ? 's' : ''}!`);
+  };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      const mapped = mapFirebaseUser(firebaseUser);
+      if (mapped) {
+        setUser(mapped);
+        setIsHistoryLoading(true);
+        try {
+          const entries = await fetchHistoryEntries(mapped.uid);
+          const mapped_entries = entries.map(mapHistoryDocumentToEntry);
+          setHistory(mapped_entries);
+        } catch (error) {
+          console.error('Failed to load history', error);
+          toast.error('Could not load your history at this time.');
+        } finally {
+          setIsHistoryLoading(false);
+        }
+      } else {
+        setUser(null);
+        setHistory([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const handleGetRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          const mapped = mapFirebaseUser(result.user);
+          if (mapped) {
+            setUser(mapped);
+            toast.success(`Welcome, ${mapped.name}!`);
+          }
+        }
+      } catch (error) {
+        if (error instanceof FirebaseError && error.code !== 'auth/no-redirect-result') {
+          toast.error(getAuthErrorMessage(error));
+        }
+      }
+    };
+
+    handleGetRedirectResult();
+  }, []);
+
   const inputCharCount = inputText.length;
   const outputCharCount = outputText.length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-50 via-brand-50 to-brand-100 relative overflow-hidden">
+    <div className="relative z-10 min-h-screen bg-gradient-to-br from-brand-50 via-brand-50 to-brand-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900 overflow-hidden transition-colors duration-300">
       {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
         <motion.div
-          className="absolute -top-40 -right-40 w-80 h-80 bg-brand-300 rounded-full mix-blend-multiply filter blur-xl opacity-20"
+          className="absolute -top-40 -right-40 w-80 h-80 bg-brand-300 dark:bg-brand-600 rounded-full mix-blend-multiply filter blur-xl opacity-20"
           animate={{
             x: [0, 100, 0],
             y: [0, 50, 0],
@@ -681,7 +549,7 @@ export default function App() {
           }}
         />
         <motion.div
-          className="absolute -bottom-40 -left-40 w-80 h-80 bg-brand-400 rounded-full mix-blend-multiply filter blur-xl opacity-20"
+          className="absolute -bottom-40 -left-40 w-80 h-80 bg-brand-400 dark:bg-brand-700 rounded-full mix-blend-multiply filter blur-xl opacity-20"
           animate={{
             x: [0, -100, 0],
             y: [0, -50, 0],
@@ -697,7 +565,7 @@ export default function App() {
       <Toaster position="top-center" />
 
       {/* Header */}
-      <header className="bg-white/70 backdrop-blur-md border-b border-brand-200/50 sticky top-0 z-50 shadow-sm">
+      <header className="bg-white/70 dark:bg-gray-900/80 backdrop-blur-md border-b border-brand-200/50 dark:border-gray-700/50 sticky top-0 z-50 shadow-sm dark:shadow-lg transition-colors duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <motion.div 
@@ -708,19 +576,20 @@ export default function App() {
             >
               <img src={logo} alt="Humality Logo" className="w-11 h-11" />
               <div>
-                <span className="text-gray-900 block leading-tight">Humality</span>
-                <span className="text-brand-600 block leading-tight" style={{ fontSize: '0.7rem' }}>AI Text Humanizer</span>
+                <span className="text-gray-900 dark:text-white block leading-tight">Humality</span>
+                <span className="text-brand-600 dark:text-brand-400 block leading-tight" style={{ fontSize: '0.7rem' }}>AI Text Humanizer</span>
               </div>
             </motion.div>
             <div className="flex items-center gap-3">
               <nav className="flex gap-1 sm:gap-2 items-center">
+                <ThemeToggle />
                 {activeSection === 'home' && user && (
                   <motion.button
                     onClick={toggleHistoryPanel}
-                    className={`px-3 py-2 rounded-lg transition-all flex items-center gap-2 ${
+                    className={`px-3 py-2 rounded-lg transition-all duration-300 flex items-center gap-2 ${
                       showHistory
-                        ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/30'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
+                        ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/30 dark:from-brand-600 dark:to-brand-700'
+                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/10'
                     }`}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -740,8 +609,8 @@ export default function App() {
                     onClick={() => setActiveSection(section)}
                     className={`px-4 py-2 rounded-lg transition-all ${
                       activeSection === section
-                        ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/30'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
+                        ? 'bg-gradient-to-r from-brand-500 to-brand-600 text-white shadow-lg shadow-brand-500/30 dark:from-brand-600 dark:to-brand-700'
+                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-white/10'
                     }`}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -850,12 +719,12 @@ export default function App() {
                 transition={{ delay: 0.2 }}
               >
                 <label className="text-gray-800 mb-4 block text-center">Select Your Tone</label>
-                <div className="flex flex-wrap justify-center gap-3 sm:gap-4 max-w-5xl mx-auto">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 max-w-6xl mx-auto">
                   {toneOptions.map((option) => (
                     <motion.button
                       key={option.value}
                       onClick={() => setTone(option.value)}
-                      className={`p-4 sm:p-5 rounded-2xl border-2 transition-all min-w-[170px] sm:min-w-[200px] ${
+                      className={`p-4 sm:p-5 rounded-2xl border-2 transition-all w-full ${
                         tone === option.value
                           ? 'bg-gradient-to-br from-brand-500 to-brand-600 border-brand-600 text-white shadow-lg shadow-brand-500/40'
                           : 'bg-white/60 backdrop-blur-sm border-brand-200/50 text-gray-700'
@@ -870,9 +739,9 @@ export default function App() {
                         ease: "easeOut"
                       }}
                     >
-                      <option.icon className={`w-6 h-6 mx-auto mb-2 ${tone === option.value ? 'text-white' : 'text-brand-600'}`} />
-                      <div className={tone === option.value ? 'text-white' : 'text-gray-900'}>{option.label}</div>
-                      <div className={`mt-1 ${tone === option.value ? 'text-brand-100' : 'text-gray-500'}`} style={{ fontSize: '0.8rem' }}>
+                      <option.icon className={`w-6 h-6 mx-auto mb-2 ${tone === option.value ? 'text-white' : 'text-brand-600 dark:text-brand-400'}`} />
+                      <div className={tone === option.value ? 'text-white' : 'text-gray-900 dark:text-gray-100'}>{option.label}</div>
+                      <div className={`mt-1 ${tone === option.value ? 'text-brand-100' : 'text-gray-500 dark:text-gray-400'}`} style={{ fontSize: '0.8rem' }}>
                         {option.description}
                       </div>
                     </motion.button>
@@ -888,24 +757,32 @@ export default function App() {
                 transition={{ delay: 0.3 }}
               >
                 {/* Input Section */}
-                <Card className="p-6 bg-white/70 backdrop-blur-md border-brand-200/50 shadow-xl hover:shadow-2xl transition-shadow">
+                <Card className="glass-panel p-6 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md border-brand-200/50 dark:border-gray-700 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.01]">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <label className="text-gray-800">AI-Generated Text</label>
-                      {inputAIAnalysis.overallPercentage > 0 && (
+                      <label className="text-gray-800 dark:text-gray-200 font-medium">AI-Generated Text</label>
+                      {isDetecting ? (
+                        <Badge className="bg-gray-400 text-white border-0 animate-pulse">
+                          Analyzing...
+                        </Badge>
+                      ) : inputAIAnalysis ? (
                         <Badge 
                           className={`${
-                            inputAIAnalysis.overallPercentage >= 70 ? 'bg-red-500' :
-                            inputAIAnalysis.overallPercentage >= 40 ? 'bg-orange-500' :
-                            inputAIAnalysis.overallPercentage >= 20 ? 'bg-yellow-500' :
+                            inputAIAnalysis.score >= 70 ? 'bg-red-500' :
+                            inputAIAnalysis.score >= 40 ? 'bg-orange-500' :
+                            inputAIAnalysis.score >= 20 ? 'bg-yellow-500' :
                             'bg-green-500'
-                          } text-white border-0`}
+                          } text-white border-0 shadow-md`}
                         >
-                          {inputAIAnalysis.overallPercentage}% AI
+                          {inputAIAnalysis.score}% AI
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-gray-400 border-gray-200 dark:border-gray-700">
+                          Detection Ready
                         </Badge>
                       )}
                     </div>
-                    <span className="text-gray-500" style={{ fontSize: '0.875rem' }}>
+                    <span className="text-gray-500 dark:text-gray-400" style={{ fontSize: '0.875rem' }}>
                       {inputCharCount} characters
                     </span>
                   </div>
@@ -913,49 +790,54 @@ export default function App() {
                     value={inputText}
                     onChange={handleInputChange}
                     placeholder="Paste or type your AI-generated text here... Start typing to see AI detection analysis."
-                    className="min-h-[280px] resize-none bg-white/80 border-brand-300/50 focus:border-brand-500 focus:ring-brand-500/20 rounded-xl"
+                    className="min-h-[280px] resize-none bg-white/80 dark:bg-gray-900/50 border-brand-300/50 dark:border-gray-600 focus:border-brand-500 focus:ring-brand-500/20 rounded-xl dark:text-gray-100"
                   />
                   
                   {/* AI Detection Highlight View */}
-                  {inputAIAnalysis.segments.length > 0 && (
+                  {inputAIAnalysis && (
                     <motion.div 
-                      className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200 max-h-[200px] overflow-y-auto"
+                      className="mt-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 max-h-[200px] overflow-y-auto"
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       transition={{ duration: 0.3 }}
                     >
                       <div className="flex items-center gap-2 mb-3">
-                        <AlertCircle className="w-4 h-4 text-brand-600" />
-                        <span className="text-gray-700" style={{ fontSize: '0.875rem' }}>AI Detection Analysis</span>
+                        <AlertCircle className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+                        <span className="text-gray-700 dark:text-gray-300" style={{ fontSize: '0.875rem' }}>AI Detection Analysis</span>
                       </div>
-                      <div className="space-y-1">
-                        {inputAIAnalysis.segments.map((segment, index) => (
-                          <span
-                            key={index}
-                            className={`inline ${getAIHighlightColor(segment.aiProbability)} px-1 py-0.5 rounded transition-colors`}
-                            title={`${Math.round(segment.aiProbability * 100)}% AI probability`}
-                          >
-                            {segment.text}
-                          </span>
-                        ))}
-                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 italic">
+                        {inputAIAnalysis.analysis}
+                      </p>
+                      {inputAIAnalysis.segments && inputAIAnalysis.segments.length > 0 && (
+                        <div className="space-y-1">
+                          {inputAIAnalysis.segments.map((segment, index) => (
+                            <span
+                              key={index}
+                              className={`inline ${getAIHighlightColor(segment.aiProbability)} px-1 py-0.5 rounded transition-colors dark:text-gray-100`}
+                              title={`${Math.round(segment.aiProbability * 100)}% AI probability`}
+                            >
+                              {segment.text}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {/* Color Legend */}
-                      <div className="mt-3 pt-3 border-t border-gray-300 flex flex-wrap gap-3" style={{ fontSize: '0.75rem' }}>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-red-200/60 rounded"></div>
-                          <span className="text-gray-600">High AI (70%+)</span>
+                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700/50 grid grid-cols-2 sm:grid-cols-4 gap-2" style={{ fontSize: '0.7rem' }}>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 bg-red-200/60 dark:bg-red-900/40 rounded-full ring-1 ring-red-400/20"></div>
+                          <span className="text-gray-500 dark:text-gray-400 font-medium">High (70%+)</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-orange-200/60 rounded"></div>
-                          <span className="text-gray-600">Medium AI (40-70%)</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 bg-orange-200/60 dark:bg-orange-900/40 rounded-full ring-1 ring-orange-400/20"></div>
+                          <span className="text-gray-500 dark:text-gray-400 font-medium">Medium (40-70%)</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-yellow-200/60 rounded"></div>
-                          <span className="text-gray-600">Low AI (20-40%)</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 bg-yellow-200/60 dark:bg-yellow-900/40 rounded-full ring-1 ring-yellow-400/20"></div>
+                          <span className="text-gray-500 dark:text-gray-400 font-medium">Low (20-40%)</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-green-200/40 rounded"></div>
-                          <span className="text-gray-600">Human-like (&lt;20%)</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 bg-green-200/40 dark:bg-green-900/40 rounded-full ring-1 ring-green-400/20"></div>
+                          <span className="text-gray-500 dark:text-gray-400 font-medium">Human (&lt;20%)</span>
                         </div>
                       </div>
                     </motion.div>
@@ -963,31 +845,35 @@ export default function App() {
                 </Card>
 
                 {/* Output Section */}
-                <Card className="p-6 bg-white/70 backdrop-blur-md border-brand-200/50 shadow-xl hover:shadow-2xl transition-shadow relative">
+                <Card className="glass-panel p-6 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md border-brand-200/50 dark:border-gray-700 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.01] relative">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <label className="text-gray-800">Humanized Text</label>
-                      {outputAIAnalysis.overallPercentage > 0 && (
+                      <label className="text-gray-800 dark:text-gray-200 font-medium">Humanized Text</label>
+                      {outputAIAnalysis ? (
                         <Badge 
                           className={`${
-                            outputAIAnalysis.overallPercentage >= 70 ? 'bg-red-500' :
-                            outputAIAnalysis.overallPercentage >= 40 ? 'bg-orange-500' :
-                            outputAIAnalysis.overallPercentage >= 20 ? 'bg-yellow-500' :
+                            outputAIAnalysis.score >= 70 ? 'bg-red-500' :
+                            outputAIAnalysis.score >= 40 ? 'bg-orange-500' :
+                            outputAIAnalysis.score >= 20 ? 'bg-yellow-500' :
                             'bg-green-500'
-                          } text-white border-0`}
+                          } text-white border-0 shadow-md`}
                         >
-                          {outputAIAnalysis.overallPercentage}% AI
+                          {outputAIAnalysis.score}% AI
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-gray-400 border-gray-200 dark:border-gray-700">
+                          AI Score
                         </Badge>
                       )}
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-gray-500" style={{ fontSize: '0.875rem' }}>
+                      <span className="text-gray-500 dark:text-gray-400" style={{ fontSize: '0.875rem' }}>
                         {outputCharCount} characters
                       </span>
                       {outputText && (
                         <motion.button
                           onClick={handleCopy}
-                          className="p-2 rounded-lg bg-brand-100 hover:bg-brand-200 text-brand-700 transition-colors"
+                          className="p-2 rounded-lg bg-brand-100 hover:bg-brand-200 dark:bg-brand-900/50 dark:hover:bg-brand-900 text-brand-700 dark:text-brand-300 transition-colors"
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
                         >
@@ -1000,49 +886,54 @@ export default function App() {
                     value={displayedOutput}
                     readOnly
                     placeholder="Your humanized text will appear here... Click the convert button below to get started."
-                    className={`min-h-[280px] resize-none bg-white/80 border-brand-300/50 rounded-xl transition-all ${isAnimatingOutput ? 'ring-2 ring-brand-200 shadow-lg shadow-brand-200/40' : ''}`}
+                    className={`min-h-[280px] resize-none bg-white/80 dark:bg-gray-900/50 border-brand-300/50 dark:border-gray-600 rounded-xl transition-all dark:text-gray-100 ${isAnimatingOutput ? 'ring-2 ring-brand-200 shadow-lg shadow-brand-200/40' : ''}`}
                   />
                   
                   {/* AI Detection Highlight View */}
-                  {outputAIAnalysis.segments.length > 0 && (
+                  {outputAIAnalysis && (
                     <motion.div 
-                      className="mt-4 p-4 bg-gray-50 rounded-xl border border-gray-200 max-h-[200px] overflow-y-auto"
+                      className="mt-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 max-h-[200px] overflow-y-auto"
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       transition={{ duration: 0.3 }}
                     >
                       <div className="flex items-center gap-2 mb-3">
-                        <AlertCircle className="w-4 h-4 text-green-600" />
-                        <span className="text-gray-700" style={{ fontSize: '0.875rem' }}>AI Detection Analysis</span>
+                        <AlertCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                        <span className="text-gray-700 dark:text-gray-300" style={{ fontSize: '0.875rem' }}>AI Detection Analysis</span>
                       </div>
-                      <div className="space-y-1">
-                        {outputAIAnalysis.segments.map((segment, index) => (
-                          <span
-                            key={index}
-                            className={`inline ${getAIHighlightColor(segment.aiProbability)} px-1 py-0.5 rounded transition-colors`}
-                            title={`${Math.round(segment.aiProbability * 100)}% AI probability`}
-                          >
-                            {segment.text}
-                          </span>
-                        ))}
-                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 italic">
+                        {outputAIAnalysis.analysis}
+                      </p>
+                      {outputAIAnalysis.segments && outputAIAnalysis.segments.length > 0 && (
+                        <div className="space-y-1">
+                          {outputAIAnalysis.segments.map((segment, index) => (
+                            <span
+                              key={index}
+                              className={`inline ${getAIHighlightColor(segment.aiProbability)} px-1 py-0.5 rounded transition-colors dark:text-gray-100`}
+                              title={`${Math.round(segment.aiProbability * 100)}% AI probability`}
+                            >
+                              {segment.text}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {/* Color Legend */}
-                      <div className="mt-3 pt-3 border-t border-gray-300 flex flex-wrap gap-3" style={{ fontSize: '0.75rem' }}>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-red-200/60 rounded"></div>
-                          <span className="text-gray-600">High AI (70%+)</span>
+                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700/50 grid grid-cols-2 sm:grid-cols-4 gap-2" style={{ fontSize: '0.7rem' }}>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 bg-red-200/60 dark:bg-red-900/40 rounded-full ring-1 ring-red-400/20"></div>
+                          <span className="text-gray-500 dark:text-gray-400 font-medium">High (70%+)</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-orange-200/60 rounded"></div>
-                          <span className="text-gray-600">Medium AI (40-70%)</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 bg-orange-200/60 dark:bg-orange-900/40 rounded-full ring-1 ring-orange-400/20"></div>
+                          <span className="text-gray-500 dark:text-gray-400 font-medium">Medium (40-70%)</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-yellow-200/60 rounded"></div>
-                          <span className="text-gray-600">Low AI (20-40%)</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 bg-yellow-200/60 dark:bg-yellow-900/40 rounded-full ring-1 ring-yellow-400/20"></div>
+                          <span className="text-gray-500 dark:text-gray-400 font-medium">Low (20-40%)</span>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-green-200/40 rounded"></div>
-                          <span className="text-gray-600">Human-like (&lt;20%)</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2.5 h-2.5 bg-green-200/40 dark:bg-green-900/40 rounded-full ring-1 ring-green-400/20"></div>
+                          <span className="text-gray-500 dark:text-gray-400 font-medium">Human (&lt;20%)</span>
                         </div>
                       </div>
                     </motion.div>
@@ -1130,7 +1021,7 @@ export default function App() {
                 {features.map((feature, index) => (
                   <motion.div
                     key={feature.title}
-                    className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-brand-200/50 shadow-lg"
+                    className="glass-panel bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-brand-200/50 shadow-lg"
                     whileHover={{ 
                       y: -10,
                       boxShadow: "0 20px 40px rgba(0, 0, 0, 0.15)"
@@ -1158,7 +1049,7 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="p-8 sm:p-12 bg-white/70 backdrop-blur-md border-brand-200/50 shadow-2xl">
+              <Card className="glass-panel p-8 sm:p-12 bg-white/70 backdrop-blur-md border-brand-200/50 shadow-2xl">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1235,7 +1126,7 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="p-8 sm:p-12 bg-white/70 backdrop-blur-md border-brand-200/50 shadow-2xl">
+              <Card className="glass-panel p-8 sm:p-12 bg-white/70 backdrop-blur-md border-brand-200/50 shadow-2xl">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1316,6 +1207,8 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      <ThemeFab />
 
       {/* History Panel */}
       <AnimatePresence>

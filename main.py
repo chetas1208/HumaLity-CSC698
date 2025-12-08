@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from humanior_client import humanize_text, list_tones
+from humanior_client import humanize_text, list_tones, detect_ai_content
 
 app = FastAPI()
 
@@ -25,8 +25,12 @@ class HumanizeRequest(BaseModel):
     tone: str
 
 
+class DetectRequest(BaseModel):
+    text: str
+
+
 BASE_DIR = Path(__file__).resolve().parent
-FRONTEND_BUILD_DIR = BASE_DIR / "build"
+FRONTEND_BUILD_DIR = BASE_DIR / "dist"
 ASSETS_DIR = FRONTEND_BUILD_DIR / "assets"
 INDEX_FILE = FRONTEND_BUILD_DIR / "index.html"
 
@@ -43,8 +47,45 @@ def get_tones():
     return list_tones()
 
 
+@app.post("/detect-ai")
+def detect_ai(request: DetectRequest):
+    try:
+        result = detect_ai_content(request.text)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/humanize-with-detection")
+def create_humanization_with_detection(request: HumanizeRequest):
+    try:
+        # 1. Detect AI on input
+        input_detection = detect_ai_content(request.text)
+        
+        # 2. Humanize
+        humanized_text = humanize_text(ai_text=request.text, tone=request.tone)
+        
+        # 3. Detect AI on output
+        output_detection = detect_ai_content(humanized_text)
+        
+        return {
+            "humanized_text": humanized_text,
+            "input_detection": input_detection,
+            "output_detection": output_detection
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"An unexpected error occurred: {str(exc)}",
+        ) from exc
+
+
 @app.post("/humanize")
 def create_humanization(request: HumanizeRequest):
+    # Keeping the old endpoint for backward compatibility if needed, 
+    # but we should prefer the new one.
     try:
         humanized_text = humanize_text(ai_text=request.text, tone=request.tone)
         return {"humanized_text": humanized_text}
