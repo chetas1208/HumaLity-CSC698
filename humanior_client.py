@@ -1,4 +1,5 @@
 import os
+import re
 from functools import lru_cache
 from typing import Final
 
@@ -90,18 +91,47 @@ def humanize_text(ai_text: str, tone: str | None = None) -> str:
 
     tone_key = _normalize_tone(tone)
     tone_data = TONE_PRESETS[tone_key]
+    tone_instruction = tone_data['prompt']
+
     prompt = (
-        "Humanize the following AI-generated text so it sounds natural, engaging, and easy to read. "
-        f"{tone_data['prompt']} Preserve the original meaning and key details. "
-        "Respond with the rewritten text only.\n\n"
-        f"Input:\n{ai_text.strip()}\n\nHumanized version:"
+        "TASK: Rewrite the provided 'AI Text' below to sound like it was written by a real, engaging human, not a formal algorithm. The goal is to eliminate all traces of robotic or stiff prose while strictly preserving the core meaning and all factual information.\n\n"
+        "--- STYLISTIC MANDATES (CRITICAL RULES) ---\n"
+        "1. Contractions Mandatory: Use contractions frequently (e.g., it's, don't, we'll). This is a primary differentiator.\n"
+        "2. Sentence Rhythm: Dramatically vary sentence length. Mix very short, punchy sentences with longer, more complex ones.\n"
+        "3. Conversational Vocabulary: Use simple, everyday words. Replace formal words (utilize, numerous, subsequently) with informal ones (use, many, later).\n"
+        "4. Natural Pauses: Add subtle filler words occasionally (well, actually, basically, honestly).\n"
+        "5. Remove Clunky Transitions: Eliminate stiff transitions (Furthermore, Moreover, In conclusion). Connect ideas organically.\n"
+        "6. Human Touch: Add personal opinion, enthusiasm, rhetorical questions, or relatable asides.\n"
+        "7. Structure: Break rigid paragraph uniformity. Use shorter, organic paragraphs.\n"
+        "8. Voice: Use active voice over passive voice.\n"
+        f"9. Tone: {tone_instruction}\n\n"
+        "--- OUTPUT CONSTRAINTS ---\n"
+        "a. Do NOT use any markdown formatting (no bold, italics, bullets, headings).\n"
+        "b. Output plain text only.\n\n"
+        f"--- INPUT TEXT ---\n{ai_text.strip()}\n\n"
+        "Human-sounding version:"
     )
 
     client = get_client()
     response = client.models.generate_content(model=DEFAULT_MODEL, contents=prompt)
     if not getattr(response, "text", "").strip():
         raise RuntimeError("Empty response from Gemini model.")
-    return response.text.strip()
+    
+    # Strip markdown formatting while preserving legitimate character uses
+    result = response.text.strip()
+    
+    # Remove bold: **text** -> text
+    result = re.sub(r'\*\*(.+?)\*\*', r'\1', result)
+    # Remove italic: *text* -> text (but not standalone * like in math)
+    result = re.sub(r'(?<!\*)\*([^\s*][^*]*?)\*(?!\*)', r'\1', result)
+    # Remove headings: # at start of line
+    result = re.sub(r'^#{1,6}\s*', '', result, flags=re.MULTILINE)
+    # Remove code blocks: ```text``` -> text
+    result = re.sub(r'```[\s\S]*?```', lambda m: m.group(0).strip('`').strip(), result)
+    # Remove inline code: `text` -> text
+    result = re.sub(r'`([^`]+)`', r'\1', result)
+    
+    return result
 
 
 def detect_ai_content(text: str) -> dict:

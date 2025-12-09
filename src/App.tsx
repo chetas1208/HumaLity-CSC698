@@ -529,6 +529,51 @@ export default function App() {
     handleGetRedirectResult();
   }, []);
 
+  // Output text animation effect
+  useEffect(() => {
+    if (outputAnimationTimeoutRef.current) {
+      window.clearTimeout(outputAnimationTimeoutRef.current);
+      outputAnimationTimeoutRef.current = null;
+    }
+
+    if (!outputText) {
+      setDisplayedOutput('');
+      setIsAnimatingOutput(false);
+      setShouldAnimateOutput(false);
+      return;
+    }
+
+    if (!shouldAnimateOutput) {
+      setDisplayedOutput(outputText);
+      setIsAnimatingOutput(false);
+      return;
+    }
+
+    setDisplayedOutput('');
+    setIsAnimatingOutput(true);
+    let index = 0;
+
+    const animate = () => {
+      index += 1;
+      setDisplayedOutput(outputText.slice(0, index));
+      if (index < outputText.length) {
+        outputAnimationTimeoutRef.current = window.setTimeout(animate, 12);
+      } else {
+        setIsAnimatingOutput(false);
+        setShouldAnimateOutput(false);
+      }
+    };
+
+    outputAnimationTimeoutRef.current = window.setTimeout(animate, 20);
+
+    return () => {
+      if (outputAnimationTimeoutRef.current) {
+        window.clearTimeout(outputAnimationTimeoutRef.current);
+        outputAnimationTimeoutRef.current = null;
+      }
+    };
+  }, [outputText, shouldAnimateOutput]);
+
   const inputCharCount = inputText.length;
   const outputCharCount = outputText.length;
 
@@ -849,9 +894,20 @@ export default function App() {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <label className="text-gray-800 dark:text-gray-200 font-medium">Humanized Text</label>
-                      {outputText && (
-                        <Badge className="bg-green-500 text-white border-0 shadow-md">
-                          {outputAIAnalysis?.score ?? 0}% AI
+                      {outputAIAnalysis ? (
+                        <Badge 
+                          className={`${
+                            outputAIAnalysis.score >= 70 ? 'bg-red-500' :
+                            outputAIAnalysis.score >= 40 ? 'bg-orange-500' :
+                            outputAIAnalysis.score >= 20 ? 'bg-yellow-500' :
+                            'bg-green-500'
+                          } text-white border-0 shadow-md`}
+                        >
+                          {outputAIAnalysis.score}% AI
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-gray-400 border-gray-200 dark:border-gray-700">
+                          AI Score
                         </Badge>
                       )}
                     </div>
