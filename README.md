@@ -68,7 +68,6 @@ This project is organized into a modern full-stack architecture:
 - **Icons:** [Lucide React](https://lucide.dev/)
 - **Components:** [Radix UI](https://www.radix-ui.com/) primitives
 - **State/Theme:** `next-themes`, `sonner` (toast notifications)
-- 
 
 ### Backend
 - **Framework:** [FastAPI](https://fastapi.tiangolo.com/)
