@@ -1,7 +1,13 @@
 
 # Humality - AI Text Humanizer
 
-![Humality Banner](https://via.placeholder.com/1200x400?text=Humality+AI+Text+Humanizer)
+## 👥 Team
+
+| Name | Email | Role |
+|------|-------|------|
+| Chetas Parekh | cparekh1@sfsu.edu | Team Lead |
+| Arric Sekhon | | |
+| Swastik Amatya | | |
 
 **Humality** is a cutting-edge platform designed to bridge the gap between artificial intelligence and authentic human expression. It transforms robotic, AI-generated content into natural, engaging, and undetectable human-like text.
 
@@ -33,14 +39,6 @@ Whether you are a content creator, student, or professional, Humality ensures yo
 - **Authentication:** Secure login via Email/Password or Google Sign-In (Firebase).
 - **One-Click Copy:** Easily copy your humanized text to the clipboard.
 - **Feedback System:** Rate the quality of outputs to help improve the system.
-
-## 👥 Team
-
-| Name | Email | Role |
-|------|-------|------|
-| Chetas Parekh | | |
-| Arric Sekhon | | |
-| Swastik Amatya | | |
 
 ## 📂 Project Structure & Code Explanation
 
