@@ -44,6 +44,7 @@ Whether you are a content creator, student, or professional, Humality ensures yo
 - **Icons:** [Lucide React](https://lucide.dev/)
 - **Components:** [Radix UI](https://www.radix-ui.com/) primitives
 - **State/Theme:** `next-themes`, `sonner` (toast notifications)
+- 
 
 ### Backend
 - **Framework:** [FastAPI](https://fastapi.tiangolo.com/)
