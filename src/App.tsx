@@ -529,6 +529,51 @@ export default function App() {
     handleGetRedirectResult();
   }, []);
 
+  // Output text animation effect
+  useEffect(() => {
+    if (outputAnimationTimeoutRef.current) {
+      window.clearTimeout(outputAnimationTimeoutRef.current);
+      outputAnimationTimeoutRef.current = null;
+    }
+
+    if (!outputText) {
+      setDisplayedOutput('');
+      setIsAnimatingOutput(false);
+      setShouldAnimateOutput(false);
+      return;
+    }
+
+    if (!shouldAnimateOutput) {
+      setDisplayedOutput(outputText);
+      setIsAnimatingOutput(false);
+      return;
+    }
+
+    setDisplayedOutput('');
+    setIsAnimatingOutput(true);
+    let index = 0;
+
+    const animate = () => {
+      index += 1;
+      setDisplayedOutput(outputText.slice(0, index));
+      if (index < outputText.length) {
+        outputAnimationTimeoutRef.current = window.setTimeout(animate, 12);
+      } else {
+        setIsAnimatingOutput(false);
+        setShouldAnimateOutput(false);
+      }
+    };
+
+    outputAnimationTimeoutRef.current = window.setTimeout(animate, 20);
+
+    return () => {
+      if (outputAnimationTimeoutRef.current) {
+        window.clearTimeout(outputAnimationTimeoutRef.current);
+        outputAnimationTimeoutRef.current = null;
+      }
+    };
+  }, [outputText, shouldAnimateOutput]);
+
   const inputCharCount = inputText.length;
   const outputCharCount = outputText.length;
 
@@ -739,9 +784,9 @@ export default function App() {
                         ease: "easeOut"
                       }}
                     >
-                      <option.icon className={`w-6 h-6 mx-auto mb-2 ${tone === option.value ? 'text-white' : 'text-brand-600 dark:text-brand-400'}`} />
-                      <div className={tone === option.value ? 'text-white' : 'text-gray-900 dark:text-gray-100'}>{option.label}</div>
-                      <div className={`mt-1 ${tone === option.value ? 'text-brand-100' : 'text-gray-500 dark:text-gray-400'}`} style={{ fontSize: '0.8rem' }}>
+                      <option.icon className={`w-6 h-6 mx-auto mb-2 ${tone === option.value ? 'text-white' : 'text-brand-600 dark:text-white'}`} />
+                      <div className={tone === option.value ? 'text-white' : 'text-gray-900 dark:text-white'}>{option.label}</div>
+                      <div className={`mt-1 ${tone === option.value ? 'text-brand-100' : 'text-gray-500 dark:text-white/70'}`} style={{ fontSize: '0.8rem' }}>
                         {option.description}
                       </div>
                     </motion.button>
