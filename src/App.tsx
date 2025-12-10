@@ -784,9 +784,9 @@ export default function App() {
                         ease: "easeOut"
                       }}
                     >
-                      <option.icon className={`w-6 h-6 mx-auto mb-2 ${tone === option.value ? 'text-white' : 'text-brand-600 dark:text-brand-400'}`} />
-                      <div className={tone === option.value ? 'text-white' : 'text-gray-900 dark:text-gray-100'}>{option.label}</div>
-                      <div className={`mt-1 ${tone === option.value ? 'text-brand-100' : 'text-gray-500 dark:text-gray-400'}`} style={{ fontSize: '0.8rem' }}>
+                      <option.icon className={`w-6 h-6 mx-auto mb-2 ${tone === option.value ? 'text-white' : 'text-brand-600 dark:text-white'}`} />
+                      <div className={tone === option.value ? 'text-white' : 'text-gray-900 dark:text-white'}>{option.label}</div>
+                      <div className={`mt-1 ${tone === option.value ? 'text-brand-100' : 'text-gray-500 dark:text-white/70'}`} style={{ fontSize: '0.8rem' }}>
                         {option.description}
                       </div>
                     </motion.button>
