@@ -6,7 +6,7 @@
 | Name | Email | Role |
 |------|-------|------|
 | Chetas Parekh | cparekh1@sfsu.edu | Team Lead |
-| Arric Sekhon | | |
+| Arric Sekhon | asekhon@sfsu.edu| Backend Lead|
 | Swastik Amatya | | |
 
 **Humality** is a cutting-edge platform designed to bridge the gap between artificial intelligence and authentic human expression. It transforms robotic, AI-generated content into natural, engaging, and undetectable human-like text.
