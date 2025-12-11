@@ -90,8 +90,8 @@ Ensure you have the following installed:
 ### 1. Clone the Repository
 Get the code on your machine:
 ```bash
-git clone https://github.com/chetas1208/CSC698-GenAI_Project.git
-cd CSC698-GenAI_Project
+git clone https://github.com/chetas1208/HumaLity-CSC698.git
+cd HumaLity-CSC698
 ```
 
 ### 2. Backend Setup
