@@ -42,6 +42,12 @@ def _frontend_ready() -> bool:
     return INDEX_FILE.is_file()
 
 
+@app.get("/health")
+def health_check():
+    """Health check endpoint for Docker/Render"""
+    return {"status": "healthy", "service": "humality"}
+
+
 @app.get("/tones")
 def get_tones():
     return list_tones()
