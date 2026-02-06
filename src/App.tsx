@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from './components/ui/button';
 import { Textarea } from './components/ui/textarea';
 import { Card } from './components/ui/card';
 import { Badge } from './components/ui/badge';
-import { Sparkles, Star, Copy, Check, ArrowRight, Zap, Shield, RefreshCw, Mail, MessageSquare, User, AlertCircle, History, Clock, Trash2, RotateCcw, LogOut, UserCircle, X } from 'lucide-react';
+import { Sparkles, Star, Copy, Check, ArrowRight, Zap, Shield, RefreshCw, Mail, MessageSquare, User, AlertCircle, History, Clock, Trash2, RotateCcw, LogOut, UserCircle, X, PartyPopper } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from 'motion/react';
 import { toast } from 'sonner@2.0.3';
 import { Toaster } from './components/ui/sonner';
 import { Input } from './components/ui/input';
@@ -20,6 +20,52 @@ import { auth, googleProvider } from './firebase/config';
 import { fetchHistoryEntries, saveHistoryEntry, deleteHistoryEntryFromFirestore, HistoryEntryDocument } from './services/history';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+// Confetti colors
+const CONFETTI_COLORS = ['#8B7AE8', '#7062D4', '#f472b6', '#22c55e', '#fbbf24', '#60a5fa', '#a78bfa'];
+
+// Create confetti burst effect
+const createConfetti = () => {
+  const confettiCount = 50;
+  const container = document.body;
+  
+  for (let i = 0; i < confettiCount; i++) {
+    const confetti = document.createElement('div');
+    confetti.className = 'confetti';
+    confetti.style.left = `${Math.random() * 100}vw`;
+    confetti.style.backgroundColor = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+    confetti.style.animationDuration = `${2 + Math.random() * 2}s`;
+    confetti.style.animationDelay = `${Math.random() * 0.5}s`;
+    confetti.style.transform = `rotate(${Math.random() * 360}deg)`;
+    confetti.style.width = `${8 + Math.random() * 8}px`;
+    confetti.style.height = `${8 + Math.random() * 8}px`;
+    confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    container.appendChild(confetti);
+    
+    setTimeout(() => confetti.remove(), 3500);
+  }
+};
+
+// Create particle burst effect
+const createParticleBurst = (x: number, y: number, color: string = '#8B7AE8') => {
+  const particleCount = 12;
+  const container = document.body;
+  
+  for (let i = 0; i < particleCount; i++) {
+    const particle = document.createElement('div');
+    particle.className = 'particle';
+    const angle = (i / particleCount) * Math.PI * 2;
+    const distance = 50 + Math.random() * 50;
+    particle.style.left = `${x}px`;
+    particle.style.top = `${y}px`;
+    particle.style.backgroundColor = color;
+    particle.style.setProperty('--tx', `${Math.cos(angle) * distance}px`);
+    particle.style.setProperty('--ty', `${Math.sin(angle) * distance}px`);
+    container.appendChild(particle);
+    
+    setTimeout(() => particle.remove(), 800);
+  }
+};
 
 // AI Detection types
 interface TextSegment {
@@ -171,6 +217,70 @@ export default function App() {
   const [isLoginLoading, setIsLoginLoading] = useState(false);
   const [isSignupLoading, setIsSignupLoading] = useState(false);
   const outputAnimationTimeoutRef = useRef<number | null>(null);
+  
+  // Interactive UI states
+  const [showSuccessCelebration, setShowSuccessCelebration] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
+  const outputCardRef = useRef<HTMLDivElement>(null);
+  
+  // Motion values for 3D tilt effect
+  const cardX = useMotionValue(0);
+  const cardY = useMotionValue(0);
+  const outputCardX = useMotionValue(0);
+  const outputCardY = useMotionValue(0);
+  
+  // Spring physics for smoother tilt
+  const springConfig = { damping: 25, stiffness: 300 };
+  const cardRotateX = useSpring(useTransform(cardY, [-0.5, 0.5], [8, -8]), springConfig);
+  const cardRotateY = useSpring(useTransform(cardX, [-0.5, 0.5], [-8, 8]), springConfig);
+  const outputCardRotateX = useSpring(useTransform(outputCardY, [-0.5, 0.5], [8, -8]), springConfig);
+  const outputCardRotateY = useSpring(useTransform(outputCardX, [-0.5, 0.5], [-8, 8]), springConfig);
+  
+  // Handle card 3D tilt
+  const handleCardMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>, isOutput: boolean = false) => {
+    const card = isOutput ? outputCardRef.current : cardRef.current;
+    if (!card) return;
+    
+    const rect = card.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const x = (e.clientX - centerX) / (rect.width / 2);
+    const y = (e.clientY - centerY) / (rect.height / 2);
+    
+    if (isOutput) {
+      outputCardX.set(x);
+      outputCardY.set(y);
+    } else {
+      cardX.set(x);
+      cardY.set(y);
+    }
+  }, [cardX, cardY, outputCardX, outputCardY]);
+  
+  const handleCardMouseLeave = useCallback((isOutput: boolean = false) => {
+    if (isOutput) {
+      outputCardX.set(0);
+      outputCardY.set(0);
+    } else {
+      cardX.set(0);
+      cardY.set(0);
+    }
+  }, [cardX, cardY, outputCardX, outputCardY]);
+  
+  // Handle ripple effect
+  const createRipple = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    const button = e.currentTarget;
+    const rect = button.getBoundingClientRect();
+    const ripple = document.createElement('span');
+    const size = Math.max(rect.width, rect.height);
+    ripple.style.width = ripple.style.height = `${size}px`;
+    ripple.style.left = `${e.clientX - rect.left - size / 2}px`;
+    ripple.style.top = `${e.clientY - rect.top - size / 2}px`;
+    ripple.className = 'ripple';
+    button.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 600);
+  }, []);
 
   // Debounced AI Detection for Input
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -280,6 +390,11 @@ export default function App() {
         };
         setHistory((prev) => [newEntry, ...prev]);
       }
+      
+      // Celebrate with confetti! 🎉
+      createConfetti();
+      setShowSuccessCelebration(true);
+      setTimeout(() => setShowSuccessCelebration(false), 3000);
       
       toast.success('Text humanized and analyzed successfully!');
     } catch (error) {
@@ -581,11 +696,26 @@ export default function App() {
     <div className="relative z-10 min-h-screen bg-gradient-to-br from-brand-50 via-brand-50 to-brand-100 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900 overflow-hidden transition-colors duration-300">
       {/* Animated background elements */}
       <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
+        {/* Large morphing blobs */}
         <motion.div
-          className="absolute -top-40 -right-40 w-80 h-80 bg-brand-300 dark:bg-brand-600 rounded-full mix-blend-multiply filter blur-xl opacity-20"
+          className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-brand-300 to-brand-500 dark:from-brand-600 dark:to-brand-800 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-30 morph-blob"
           animate={{
-            x: [0, 100, 0],
-            y: [0, 50, 0],
+            x: [0, 100, 50, 0],
+            y: [0, 50, 100, 0],
+            scale: [1, 1.2, 0.9, 1],
+          }}
+          transition={{
+            duration: 25,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+        />
+        <motion.div
+          className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-br from-pink-300 to-purple-500 dark:from-pink-700 dark:to-purple-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-25 morph-blob"
+          animate={{
+            x: [0, -100, -50, 0],
+            y: [0, -50, -100, 0],
+            scale: [1, 0.9, 1.1, 1],
           }}
           transition={{
             duration: 20,
@@ -594,17 +724,65 @@ export default function App() {
           }}
         />
         <motion.div
-          className="absolute -bottom-40 -left-40 w-80 h-80 bg-brand-400 dark:bg-brand-700 rounded-full mix-blend-multiply filter blur-xl opacity-20"
+          className="absolute top-1/3 left-1/3 w-72 h-72 bg-gradient-to-br from-cyan-300 to-blue-500 dark:from-cyan-700 dark:to-blue-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-20 morph-blob"
           animate={{
-            x: [0, -100, 0],
-            y: [0, -50, 0],
+            x: [0, 60, -40, 0],
+            y: [0, -80, 60, 0],
+            scale: [1, 1.1, 0.95, 1],
           }}
           transition={{
-            duration: 15,
+            duration: 22,
             repeat: Infinity,
-            ease: "easeInOut"
+            ease: "easeInOut",
+            delay: 5
           }}
         />
+        
+        {/* Floating particles */}
+        {[...Array(8)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-2 h-2 bg-brand-500/40 dark:bg-brand-400/40 rounded-full"
+            style={{
+              left: `${10 + i * 12}%`,
+              top: `${20 + (i % 3) * 25}%`,
+            }}
+            animate={{
+              y: [0, -30, 0],
+              x: [0, i % 2 === 0 ? 20 : -20, 0],
+              opacity: [0.2, 0.6, 0.2],
+              scale: [1, 1.5, 1],
+            }}
+            transition={{
+              duration: 4 + i * 0.5,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: i * 0.3
+            }}
+          />
+        ))}
+        
+        {/* Sparkle effects */}
+        {[...Array(5)].map((_, i) => (
+          <motion.div
+            key={`sparkle-${i}`}
+            className="absolute w-1 h-1 bg-yellow-400/60 rounded-full"
+            style={{
+              left: `${20 + i * 18}%`,
+              top: `${15 + i * 15}%`,
+            }}
+            animate={{
+              opacity: [0, 1, 0],
+              scale: [0, 1.5, 0],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: i * 0.8
+            }}
+          />
+        ))}
       </div>
 
       <Toaster position="top-center" />
@@ -739,20 +917,57 @@ export default function App() {
               {/* Hero Section */}
               <div className="text-center mb-12 sm:mb-16">
                 <motion.div
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
+                  transition={{ delay: 0.1, type: "spring", stiffness: 100 }}
                 >
-                  <Badge className="mb-4 bg-gradient-to-r from-brand-500 to-brand-600 text-white border-0 px-4 py-1.5">
-                    AI-Powered Text Transformation
-                  </Badge>
-                  <h1 className="text-gray-900 mb-4 bg-gradient-to-r from-brand-500 via-brand-600 to-brand-700 bg-clip-text text-transparent">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2, type: "spring", stiffness: 200, damping: 15 }}
+                  >
+                    <Badge className="mb-6 bg-gradient-to-r from-brand-500 via-brand-600 to-brand-500 text-white border-0 px-6 py-2 text-sm font-medium shadow-lg shadow-brand-500/30 animate-pulse">
+                      ✨ AI-Powered Text Transformation
+                    </Badge>
+                  </motion.div>
+                  <motion.h1 
+                    className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 animated-gradient-text glow-text"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.3, duration: 0.5 }}
+                  >
                     Making AI Text Feel Human
-                  </h1>
-                  <p className="text-gray-600 max-w-2xl mx-auto mb-8">
+                  </motion.h1>
+                  <motion.p 
+                    className="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-8 text-lg leading-relaxed"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                  >
                     Transform your AI-generated content into natural, engaging text that resonates with your audience. 
-                    Choose your tone, click convert, and watch the magic happen.
-                  </p>
+                    Choose your tone, click convert, and watch the <span className="text-brand-600 font-semibold">magic</span> happen.
+                  </motion.p>
+                  {/* Floating decorative elements */}
+                  <div className="relative h-0">
+                    <motion.div
+                      className="absolute -left-20 -top-20 w-16 h-16 bg-gradient-to-br from-brand-400/30 to-brand-600/30 rounded-full blur-xl"
+                      animate={{ 
+                        y: [0, -20, 0],
+                        scale: [1, 1.2, 1],
+                        opacity: [0.5, 0.8, 0.5]
+                      }}
+                      transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    <motion.div
+                      className="absolute -right-20 -top-10 w-20 h-20 bg-gradient-to-br from-pink-400/30 to-purple-600/30 rounded-full blur-xl"
+                      animate={{ 
+                        y: [0, 20, 0],
+                        scale: [1, 1.3, 1],
+                        opacity: [0.4, 0.7, 0.4]
+                      }}
+                      transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+                    />
+                  </div>
                 </motion.div>
               </div>
 
@@ -763,23 +978,30 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                <label className="text-gray-800 mb-4 block text-center">Select Your Tone</label>
+                <label className="text-gray-800 dark:text-gray-200 mb-4 block text-center font-medium">Select Your Tone</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 max-w-6xl mx-auto">
-                  {toneOptions.map((option) => (
+                  {toneOptions.map((option, index) => (
                     <motion.button
                       key={option.value}
-                      onClick={() => setTone(option.value)}
-                      className={`p-4 sm:p-5 rounded-2xl border-2 transition-all w-full ${
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        createParticleBurst(rect.left + rect.width / 2, rect.top + rect.height / 2, tone === option.value ? '#8B7AE8' : '#22c55e');
+                        setTone(option.value);
+                      }}
+                      className={`p-4 sm:p-5 rounded-2xl border-2 transition-all w-full relative overflow-hidden ${
                         tone === option.value
-                          ? 'bg-gradient-to-br from-brand-500 to-brand-600 border-brand-600 text-white shadow-lg shadow-brand-500/40'
-                          : 'bg-white/60 backdrop-blur-sm border-brand-200/50 text-gray-700'
+                          ? 'bg-gradient-to-br from-brand-500 to-brand-600 border-brand-600 text-white shadow-xl shadow-brand-500/40 neon-border'
+                          : 'bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-brand-200/50 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-brand-400'
                       }`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
                       whileHover={{ 
                         y: -10,
                         boxShadow: "0 20px 40px rgba(0, 0, 0, 0.15)"
                       }}
                       whileTap={{ scale: 0.97 }}
                       transition={{ 
+                        delay: 0.25 + index * 0.05,
                         duration: 0.2,
                         ease: "easeOut"
                       }}
@@ -802,7 +1024,20 @@ export default function App() {
                 transition={{ delay: 0.3 }}
               >
                 {/* Input Section */}
-                <Card className="glass-panel p-6 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md border-brand-200/50 dark:border-gray-700 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.01]">
+                <motion.div
+                  ref={cardRef}
+                  style={{
+                    rotateX: cardRotateX,
+                    rotateY: cardRotateY,
+                    transformStyle: 'preserve-3d',
+                    perspective: 1000,
+                  }}
+                  onMouseMove={(e) => handleCardMouseMove(e, false)}
+                  onMouseLeave={() => handleCardMouseLeave(false)}
+                >
+                <Card className="glass-panel p-6 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md border-brand-200/50 dark:border-gray-700 shadow-xl hover:shadow-2xl transition-all duration-300"
+                  style={{ transformStyle: 'preserve-3d' }}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <label className="text-gray-800 dark:text-gray-200 font-medium">AI-Generated Text</label>
@@ -888,9 +1123,23 @@ export default function App() {
                     </motion.div>
                   )}
                 </Card>
+                </motion.div>
 
                 {/* Output Section */}
-                <Card className="glass-panel p-6 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md border-brand-200/50 dark:border-gray-700 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.01] relative">
+                <motion.div
+                  ref={outputCardRef}
+                  style={{
+                    rotateX: outputCardRotateX,
+                    rotateY: outputCardRotateY,
+                    transformStyle: 'preserve-3d',
+                    perspective: 1000,
+                  }}
+                  onMouseMove={(e) => handleCardMouseMove(e, true)}
+                  onMouseLeave={() => handleCardMouseLeave(true)}
+                >
+                <Card className={`glass-panel p-6 bg-white/70 dark:bg-gray-800/70 backdrop-blur-md border-brand-200/50 dark:border-gray-700 shadow-xl hover:shadow-2xl transition-all duration-300 relative ${showSuccessCelebration ? 'rainbow-border' : ''}`}
+                  style={{ transformStyle: 'preserve-3d' }}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <label className="text-gray-800 dark:text-gray-200 font-medium">Humanized Text</label>
@@ -927,12 +1176,27 @@ export default function App() {
                       )}
                     </div>
                   </div>
-                  <Textarea
-                    value={displayedOutput}
-                    readOnly
-                    placeholder="Your humanized text will appear here... Click the convert button below to get started."
-                    className={`min-h-[280px] resize-none bg-white/80 dark:bg-gray-900/50 border-brand-300/50 dark:border-gray-600 rounded-xl transition-all dark:text-gray-100 ${isAnimatingOutput ? 'ring-2 ring-brand-200 shadow-lg shadow-brand-200/40' : ''}`}
-                  />
+                  <div className="relative">
+                    <Textarea
+                      value={displayedOutput}
+                      readOnly
+                      placeholder="Your humanized text will appear here... Click the convert button below to get started."
+                      className={`min-h-[280px] resize-none bg-white/80 dark:bg-gray-900/50 border-brand-300/50 dark:border-gray-600 rounded-xl transition-all dark:text-gray-100 ${isAnimatingOutput ? 'ring-2 ring-brand-400 shadow-lg shadow-brand-200/40' : ''}`}
+                    />
+                    {/* Typing cursor */}
+                    {isAnimatingOutput && (
+                      <motion.span 
+                        className="typing-cursor absolute"
+                        style={{ 
+                          bottom: '1rem', 
+                          right: '1rem',
+                        }}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                      />
+                    )}
+                  </div>
                   
                   {/* AI Detection Highlight View */}
                   {outputAIAnalysis && (
@@ -991,34 +1255,66 @@ export default function App() {
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="pt-6 mt-6 border-t border-brand-200"
+                        className="pt-6 mt-6 border-t border-brand-200 dark:border-gray-700"
                       >
-                        <label className="text-gray-800 mb-3 block">How did we do?</label>
-                        <div className="flex gap-2">
-                          {[1, 2, 3, 4, 5].map((star) => (
+                        <label className="text-gray-800 dark:text-gray-200 mb-3 block font-medium">How did we do?</label>
+                        <div className="flex gap-3 items-center">
+                          {[1, 2, 3, 4, 5].map((star, index) => (
                             <motion.button
                               key={star}
-                              onClick={() => handleRating(star)}
+                              onClick={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                if (star >= 4) {
+                                  createConfetti();
+                                }
+                                createParticleBurst(rect.left + rect.width / 2, rect.top + rect.height / 2, '#fbbf24');
+                                handleRating(star);
+                              }}
                               onMouseEnter={() => setHoverRating(star)}
                               onMouseLeave={() => setHoverRating(0)}
-                              whileHover={{ scale: 1.2, rotate: [0, -10, 10, 0] }}
-                              whileTap={{ scale: 0.9 }}
-                              transition={{ duration: 0.2 }}
+                              className="relative"
+                              initial={{ opacity: 0, scale: 0 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: 0.1 + index * 0.05, type: "spring", stiffness: 300 }}
+                              whileHover={{ 
+                                scale: 1.3, 
+                                rotate: [0, -15, 15, 0],
+                                transition: { duration: 0.3 }
+                              }}
+                              whileTap={{ scale: 0.8 }}
                             >
                               <Star
-                                className={`w-9 h-9 transition-all ${
+                                className={`w-10 h-10 transition-all duration-300 ${
                                   star <= (hoverRating || rating)
-                                    ? 'fill-yellow-400 text-yellow-400 drop-shadow-lg'
-                                    : 'text-gray-300'
+                                    ? 'fill-yellow-400 text-yellow-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.7)]'
+                                    : 'text-gray-300 dark:text-gray-600'
                                 }`}
                               />
+                              {star <= (hoverRating || rating) && (
+                                <motion.div
+                                  className="absolute inset-0 bg-yellow-400/20 rounded-full blur-md"
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1.5 }}
+                                  transition={{ duration: 0.3 }}
+                                />
+                              )}
                             </motion.button>
                           ))}
+                          {rating > 0 && (
+                            <motion.span
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              className="ml-2 text-gray-600 dark:text-gray-400 text-sm"
+                            >
+                              {rating === 5 ? '🎉 Amazing!' : rating >= 4 ? '😊 Great!' : rating >= 3 ? '👍 Good' : rating >= 2 ? '😐 Okay' : '😔 Poor'}
+                            </motion.span>
+                          )}
                         </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </Card>
+                </motion.div>
               </motion.div>
 
               {/* Convert Button */}
@@ -1028,37 +1324,83 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.4 }}
               >
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <motion.div 
+                  whileHover={{ scale: 1.08 }} 
+                  whileTap={{ scale: 0.92 }}
+                  className="magnetic-button"
+                >
                   <Button
-                    onClick={handleConvert}
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      createParticleBurst(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                      createRipple(e);
+                      handleConvert();
+                    }}
                     disabled={!inputText.trim() || isConverting}
-                    className="bg-gradient-to-r from-brand-500 via-brand-600 to-brand-700 hover:from-brand-600 hover:via-brand-700 hover:to-brand-700 text-white px-16 py-7 rounded-2xl shadow-2xl shadow-brand-500/40 hover:shadow-brand-600/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group"
+                    className={`bg-gradient-to-r from-brand-500 via-brand-600 to-brand-700 hover:from-brand-600 hover:via-brand-700 hover:to-brand-700 text-white px-16 py-7 rounded-2xl shadow-2xl shadow-brand-500/40 hover:shadow-brand-600/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group ripple-container ${isConverting ? 'pulse-glow' : ''}`}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
+                    {/* Animated gradient shine */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/30 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                    {/* Glow effect */}
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-t from-white/0 via-white/10 to-white/20 rounded-2xl" />
                     {isConverting ? (
-                      <span className="flex items-center gap-3">
+                      <span className="flex items-center gap-3 relative z-10">
                         <motion.div
                           animate={{ rotate: 360 }}
-                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                          transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
                         >
                           <RefreshCw className="w-6 h-6" />
                         </motion.div>
-                        Converting...
+                        <span className="animated-gradient-text font-semibold">Converting...</span>
                       </span>
                     ) : (
-                      <span className="flex items-center gap-3">
-                        <Sparkles className="w-6 h-6" />
-                        Humanize Text
-                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                      <span className="flex items-center gap-3 relative z-10">
+                        <motion.div
+                          animate={{ rotate: [0, 15, -15, 0] }}
+                          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                        >
+                          <Sparkles className="w-6 h-6" />
+                        </motion.div>
+                        <span className="font-semibold">Humanize Text</span>
+                        <motion.div
+                          animate={{ x: [0, 5, 0] }}
+                          transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                        >
+                          <ArrowRight className="w-5 h-5" />
+                        </motion.div>
                       </span>
                     )}
                   </Button>
                 </motion.div>
               </motion.div>
 
+              {/* Success Celebration Overlay */}
+              <AnimatePresence>
+                {showSuccessCelebration && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    className="fixed inset-0 pointer-events-none flex items-center justify-center z-50"
+                  >
+                    <motion.div
+                      className="bg-gradient-to-br from-brand-500 to-brand-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
+                      animate={{ 
+                        scale: [1, 1.1, 1],
+                        rotate: [0, -2, 2, 0]
+                      }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <PartyPopper className="w-8 h-8" />
+                      <span className="text-xl font-bold">Successfully Humanized! 🎉</span>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               {/* Features Grid - Moved to bottom */}
               <motion.div
-                className="grid sm:grid-cols-3 gap-4 sm:gap-6 max-w-4xl mx-auto"
+                className="grid sm:grid-cols-3 gap-4 sm:gap-6 max-w-4xl mx-auto stagger-children"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 }}
@@ -1066,19 +1408,28 @@ export default function App() {
                 {features.map((feature, index) => (
                   <motion.div
                     key={feature.title}
-                    className="glass-panel bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-brand-200/50 shadow-lg"
+                    className="glass-panel bg-white/60 backdrop-blur-sm rounded-2xl p-6 border border-brand-200/50 shadow-lg hover-lift group cursor-pointer"
                     whileHover={{ 
-                      y: -10,
-                      boxShadow: "0 20px 40px rgba(0, 0, 0, 0.15)"
+                      y: -12,
+                      boxShadow: "0 25px 50px rgba(139, 122, 232, 0.25)"
                     }}
+                    whileTap={{ scale: 0.98 }}
                     transition={{ 
-                      duration: 0.2,
-                      ease: "easeOut"
+                      duration: 0.3,
+                      ease: [0.34, 1.56, 0.64, 1]
                     }}
                   >
-                    <feature.icon className="w-8 h-8 text-brand-600 mx-auto mb-3" />
-                    <h3 className="text-gray-900 mb-2">{feature.title}</h3>
-                    <p className="text-gray-600">{feature.description}</p>
+                    <motion.div
+                      className="w-16 h-16 bg-gradient-to-br from-brand-500 to-brand-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-brand-500/30"
+                      whileHover={{ rotate: [0, -10, 10, 0], scale: 1.1 }}
+                      transition={{ duration: 0.4 }}
+                    >
+                      <feature.icon className="w-8 h-8 text-white" />
+                    </motion.div>
+                    <h3 className="text-gray-900 mb-2 group-hover:text-brand-600 transition-colors">{feature.title}</h3>
+                    <p className="text-gray-600 group-hover:text-gray-700 transition-colors">{feature.description}</p>
+                    {/* Decorative glow */}
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-brand-500/0 to-brand-600/0 group-hover:from-brand-500/5 group-hover:to-brand-600/10 transition-all duration-300 pointer-events-none" />
                   </motion.div>
                 ))}
               </motion.div>
